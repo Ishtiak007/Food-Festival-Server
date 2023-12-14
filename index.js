@@ -36,6 +36,7 @@ async function run() {
 
     const menuCollection = client.db("foodFestivalDB").collection("menu");
     const reviewsCollection = client.db("foodFestivalDB").collection("reviews");
+    const cartsCollection = client.db("foodFestivalDB").collection("carts");
 
 
 
@@ -47,6 +48,14 @@ async function run() {
         const result = await reviewsCollection.find().toArray();
         res.send(result);
     });
+
+
+    // carts related api
+    app.post('/carts',async(req,res)=>{
+        const cartItem = req.body;
+        const result = await cartsCollection.insertOne(cartItem);
+        res.send(result);
+    })
 
 
 
