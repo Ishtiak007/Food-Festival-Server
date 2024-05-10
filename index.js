@@ -3,6 +3,7 @@ const app = express();
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const port = process.env.PORT || 5000;
 
 // MIDDLEWARE
@@ -30,7 +31,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
 
 
@@ -39,6 +40,7 @@ async function run() {
     const reviewsCollection = client.db("foodFestivalDB").collection("reviews");
     const cartsCollection = client.db("foodFestivalDB").collection("carts");
     const usersCollection = client.db("foodFestivalDB").collection("users");
+    const paymentsCollection = client.db("foodFestivalDB").collection("payments");
 
 
 
@@ -197,14 +199,56 @@ async function run() {
         }
         const result = await usersCollection.updateOne(filter,updatedDoc);
         res.send(result);
-    });  
+    }); 
+    
+    
 
+
+    // PAYMENT RELADED
+    // payment intent
+    app.post('/create-payment-intent',async(req,res)=>{
+        const {price}=req.body;
+        const amount = parseInt(price * 100);
+        console.log(amount,'amount insite the intent')
+  
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount : amount,
+          currency : 'usd',
+          payment_method_types:['card']
+        });
+        res.send({
+          clientSecret: paymentIntent.client_secret
+        })
+      });
+      app.post('/payments', async (req, res) => {
+        const payment = req.body;
+        const paymentResult = await paymentsCollection.insertOne(payment);
+  
+        console.log('payment info', payment);
+        const query = {
+          _id: {
+            $in: payment.cartIds.map(id => new ObjectId(id))
+          }
+        };
+  
+        const deleteResult = await cartsCollection.deleteMany(query);
+  
+        res.send({ paymentResult, deleteResult });
+      });
+      app.get('/payments/:email',verifyToken,async(req,res)=>{
+        const query = {email : req.params.email}
+        if(req.params.email !== req.decoded.email){
+          return res.status(403).send({message: 'forbidden access'})
+        }
+        const result = await paymentsCollection.find(query).toArray();
+        res.send(result)
+      });
 
 
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
